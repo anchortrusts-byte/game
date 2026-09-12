@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAME & WATCH - ALIEN</title>
+<style>
+    /* 全体のセンタリング */
+    body {
+        background-color: #222;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        font-family: 'Arial', sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    /* ゲームウォッチ本体の筐体 */
+    .game-console {
+        background: linear-gradient(135deg, #8b1e2f, #5a111b); /* ワインレッド */
+        width: 580px;
+        max-width: 95vw;
+        height: 380px;
+        border-radius: 35px;
+        box-shadow:
+            0 15px 30px rgba(0,0,0,0.7),
+            inset 0 4px 6px rgba(255,255,255,0.3),
+            inset 0 -10px 15px rgba(0,0,0,0.5);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        box-sizing: border-box;
+        border: 4px solid #4a0d15;
+    }
+
+    /* 上部のブランドロゴ */
+    .brand-text {
+        color: #ddd;
+        font-size: 16px;
+        font-weight: bold;
+        letter-spacing: 5px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        margin-bottom: 10px;
+    }
+
+    /* ゴールドの金属製フロントパネル */
+    .metal-panel {
+        background: linear-gradient(180deg, #ffd700, #b8860b, #e6c229); /* 金メタリック */
+        width: 440px;
+        max-width: 100%;
+        height: 250px;
+        border-radius: 10px;
+        border: 3px solid #333;
+        box-shadow: inset 0 2px 5px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.5);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    /* ゲームタイトル */
+    .game-title {
+        position: absolute;
+        top: 6px;
+        color: #222;
+        font-size: 14px;
+        font-weight: bold;
+        letter-spacing: 3px;
+    }
+
+    /* 液晶画面（Canvas） */
+    canvas {
+        background-color: #7fd4e8; /* フルカラー版：明るい海の色 */
+        border: 4px solid #444;
+        box-shadow: inset 0 5px 10px rgba(0,0,0,0.4);
+        border-radius: 4px;
+        margin-top: 15px;
+        max-width: 100%;
+        touch-action: none;
+    }
+
+    /* 操作用ボタンの配置 */
+    .controls {
+        position: absolute;
+        width: 100%;
+        top: 250px;
+        left: 0;
+        pointer-events: none; /* コンテナ自体はクリックをスルー */
+    }
+
+    /* 赤いプラスチックボタンの共通設定 */
+    .game-button {
+        position: absolute;
+        width: 54px;
+        height: 54px;
+        background: linear-gradient(135deg, #d32f2f, #9a0007); /* プラスチック赤 */
+        border: 3px solid #5f0004;
+        border-radius: 50%;
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 6px 0 #5f0004, 0 8px 10px rgba(0,0,0,0.5);
+        pointer-events: auto;
+        transition: all 0.05s ease;
+        outline: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* ボタンを押したときの沈み込み演出 */
+    .game-button:active {
+        transform: translateY(4px);
+        box-shadow: 0 2px 0 #5f0004, 0 4px 6px rgba(0,0,0,0.5);
+    }
+
+    .btn-left { left: 16px; }
+    .btn-right { right: 16px; }
+
+    /* リトライボタン（液晶の下に配置） */
+    #retryBtn {
+        position: absolute;
+        bottom: 25px;
+        background: #444;
+        color: #fff;
+        border: 2px solid #222;
+        padding: 5px 15px;
+        font-size: 12px;
+        font-weight: bold;
+        border-radius: 5px;
+        cursor: pointer;
+        display: none; /* 通常時は非表示 */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        z-index: 5;
+    }
+    #retryBtn:active { transform: scale(0.95); }
+
+    #soundHint {
+        position: absolute;
+        bottom: 4px;
+        width: 100%;
+        text-align: center;
+        color: #eee;
+        font-size: 10px;
+        opacity: 0.7;
+    }
+</style>
+</head>
+<body>
+
+<div class="game-console">
+    <div class="brand-text">GAME &amp; WATCH</div>
+
+    <div class="metal-panel">
+        <div class="game-title">ALIEN</div>
+        <canvas id="gameCanvas" width="400" height="200"></canvas>
+    </div>
+
+    <div class="controls">
+        <button id="btnLeft" class="game-button btn-left" aria-label="戻る">◀</button>
+        <button id="btnRight" class="game-button btn-right" aria-label="進む">▶</button>
+    </div>
+
+    <button id="retryBtn">RETRY</button>
+    <div id="soundHint">A/D または ◀▶ キーで操作 ・ タップで音が有効になります</div>
+</div>
+
+<script>
+(() => {
+    "use strict";
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const retryBtn = document.getElementById("retryBtn");
+
+    // ==========================================================
+    // 音響システム（AudioContextは使い回す。生成コストと
+    // ブラウザの自動再生ポリシーの両方に配慮する）
+    // ==========================================================
+    let audioCtx = null;
+    function ensureAudio() {
+        if (!audioCtx) {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                audioCtx = null;
+            }
+        }
+        if (audioCtx && audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => {});
+        }
+        return audioCtx;
+    }
+
+    function playTone(frequency, duration, type = "square") {
+        const ac = ensureAudio();
+        if (!ac) return;
+        try {
+            const oscillator = ac.createOscillator();
+            const gainNode = ac.createGain();
+
+            oscillator.type = type;
+            oscillator.frequency.value = frequency;
+
+            gainNode.gain.setValueAtTime(0.08, ac.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ac.destination);
+
+            oscillator.start();
+            oscillator.stop(ac.currentTime + duration);
+        } catch (e) {
+            // 再生に失敗しても致命的ではないので無視する
+        }
+    }
+
+    function playMoveSound() { playTone(880, 0.05); }
+    function playTreasureSound() {
+        playTone(1320, 0.05);
+        setTimeout(() => playTone(1760, 0.05), 50);
+    }
+    function playMissSound() {
+        let count = 0;
+        const t = setInterval(() => {
+            playTone(150, 0.06);
+            count++;
+            if (count >= 4) clearInterval(t);
+        }, 80);
+    }
+    function playGameOverSound() {
+        playMissSound();
+        setTimeout(() => {
+            const freqs = [600, 500, 400, 300];
+            freqs.forEach((f, i) => {
+                setTimeout(() => playTone(f, 0.15), i * 150);
+            });
+        }, 400);
+    }
+
+    // ==========================================================
+    // ゲーム設定と状態定義
+    // ==========================================================
+    // 潜水夫の移動ルート座標 (0: 船, 1~4: タコの足レーン, 5: 宝箱)
+    // 画面左下の空間を活かすため、船から一直線ではなく
+    // 「C」の字を描くように左下へ遠回りしてから宝箱へ向かうルートにする。
+    const lanes = [
+        { x: 45,  y: 35,  label: "船" },
+        { x: 55,  y: 100, label: "1" },
+        { x: 95,  y: 160, label: "2" },
+        { x: 190, y: 172, label: "3" },
+        { x: 288, y: 162, label: "4" },
+        { x: 355, y: 130, label: "宝" }
+    ];
+    const ARM_MAX = 3;        // 足の最大伸長段階
+    // タコの足の付け根（本体側）の座標。頭部スプライトの幅広い底辺に
+    // ぴったり密着させ、隙間なく足が生えているように見せる。
+    const armOrigins = [
+        { x: 350, y: 82 },
+        { x: 360, y: 87 },
+        { x: 372, y: 87 },
+        { x: 382, y: 82 }
+    ];
+
+    let playerPos = 0;         // プレイヤーの現在位置 (0 ~ 5)
+    let hasTreasure = false;   // 宝を持っているか
+    let score = 0;             // スコア
+    let lives = 3;             // 残機
+    let gameState = "PLAYING"; // "PLAYING" または "GAMEOVER"
+    let frame = 0;             // アニメーション用カウンタ
+
+    // タコの足の状態（4本。長さは0〜ARM_MAX。ARM_MAXが最大かつ危険）
+    let armLengths = [0, 0, 0, 0];
+    let armDirections = [1, 1, 1, 1]; // 1: 伸びる, -1: 縮む
+
+    let octopusTimer = null;
+    let octopusInterval = 400; // 初期の更新速度(ms)
+
+    // タコ本体のスプライト画像（不気味なモノクロ実写風シルエット、SVGを埋め込み）
+    const octopusSprite = new Image();
+    let octopusSpriteLoaded = false;
+    octopusSprite.onload = () => { octopusSpriteLoaded = true; };
+    octopusSprite.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMTkwIj4KPHBhdGggZmlsbD0iIzZiMmZhMCIgZD0iTTEwMCwxMCBDMTM1LDggMTY1LDM1IDE2OCw3MiBDMTcwLDEwMCAxNjAsMTMwIDEzOCwxNTAgQzEyOCwxNjAgMTEyLDE2MiAxMDAsMTYyIEM4OCwxNjIgNzIsMTYwIDYyLDE1MCBDNDAsMTMwIDMwLDEwMCAzMiw3MiBDMzUsMzUgNjUsOCAxMDAsMTAgWiIvPgo8ZyBmaWxsPSIjZmZmZmZmIj4KPGNpcmNsZSBjeD0iNzIiIGN5PSI4MCIgcj0iMjMiLz4KPGNpcmNsZSBjeD0iMTI4IiBjeT0iODAiIHI9IjIzIi8+CjwvZz4KPGcgZmlsbD0iIzZiMmZhMCI+CjxjaXJjbGUgY3g9IjcyIiBjeT0iODUiIHI9IjExIi8+CjxjaXJjbGUgY3g9IjEyOCIgY3k9Ijg1IiByPSIxMSIvPgo8L2c+CjxnIGZpbGw9IiNmZmZmZmYiPgo8Y2lyY2xlIGN4PSI2OCIgY3k9IjgwIiByPSIzIi8+CjxjaXJjbGUgY3g9IjEyNCIgY3k9IjgwIiByPSIzIi8+CjwvZz4KPHBhdGggZmlsbD0iI2ZmZmZmZiIgZD0iTTYyLDExMiBDNjIsMTA2IDcwLDEwMiAxMDAsMTAyIEMxMzAsMTAyIDEzOCwxMDYgMTM4LDExMiBMMTM4LDE0MiBDMTM4LDE0OCAxMzAsMTUyIDEwMCwxNTIgQzcwLDE1MiA2MiwxNDggNjIsMTQyIFoiLz4KPGcgZmlsbD0iIzZiMmZhMCI+CjxwYXRoIGQ9Ik03MCwxMDIgTDgyLDEwMiBMNzYsMTIwIFoiLz4KPHBhdGggZD0iTTkwLDEwMiBMMTAyLDEwMiBMOTYsMTIyIFoiLz4KPHBhdGggZD0iTTExMCwxMDIgTDEyMiwxMDIgTDExNiwxMjAgWiIvPgo8cGF0aCBkPSJNNzgsMTUyIEw5MCwxNTIgTDg0LDEzMiBaIi8+CjxwYXRoIGQ9Ik05OCwxNTIgTDExMCwxNTIgTDEwNCwxMzAgWiIvPgo8cGF0aCBkPSJNMTE4LDE1MiBMMTMwLDE1MiBMMTI0LDEzMiBaIi8+CjwvZz4KPC9zdmc+Cg==";
+
+    // ==========================================================
+    // ゲームロジック
+    // ==========================================================
+
+    // 難易度（スピード）自動調整
+    function getOctopusInterval() {
+        if (score >= 30) return 150; // レベル3: 超高速
+        if (score >= 20) return 220; // レベル2: 高速
+        if (score >= 10) return 300; // レベル1: 中速
+        return 400;                  // レベル0: 初期
+    }
+
+    function updateOctopusSpeed() {
+        const currentInterval = getOctopusInterval();
+        if (octopusInterval !== currentInterval) {
+            octopusInterval = currentInterval;
+            clearInterval(octopusTimer);
+            octopusTimer = setInterval(updateOctopus, octopusInterval);
+        }
+    }
+
+    // タコの足の伸縮処理
+    function updateOctopus() {
+        if (gameState !== "PLAYING") return;
+
+        for (let i = 0; i < 4; i++) {
+            // ランダムに少し動きに揺らぎを入れる（実機風）
+            if (Math.random() > 0.2) {
+                armLengths[i] += armDirections[i];
+                if (armLengths[i] >= ARM_MAX) {
+                    armLengths[i] = ARM_MAX;
+                    armDirections[i] = -1; // 最大まで伸びたら縮み始める
+                } else if (armLengths[i] <= 0) {
+                    armLengths[i] = 0;
+                    armDirections[i] = 1;  // 縮みきったら伸び始める
+                }
+            }
+        }
+        checkCollision();
+        draw();
+    }
+
+    // 衝突判定
+    function checkCollision() {
+        if (gameState !== "PLAYING") return;
+        if (playerPos >= 1 && playerPos <= 4) {
+            const armIndex = playerPos - 1;
+            // 足の長さが最大のときにプレイヤーがそのレーンにいたらアウト
+            if (armLengths[armIndex] === ARM_MAX) {
+                triggerMiss();
+            }
+        }
+    }
+
+    // ミス時の処理
+    function triggerMiss() {
+        lives--;
+        playerPos = 0; // 船に戻される
+        hasTreasure = false;
+
+        if (lives <= 0) {
+            lives = 0;
+            gameState = "GAMEOVER";
+            clearInterval(octopusTimer);
+            playGameOverSound();
+            retryBtn.style.display = "block";
+        } else {
+            playMissSound();
+        }
+        draw();
+    }
+
+    // プレイヤー移動処理
+    function movePlayer(direction) {
+        if (gameState !== "PLAYING") return;
+
+        if (direction === "LEFT" && playerPos > 0) {
+            playerPos--;
+            playMoveSound();
+        } else if (direction === "RIGHT" && playerPos < 5) {
+            playerPos++;
+            playMoveSound();
+        } else {
+            return; // 端で入力しても何も起きない
+        }
+
+        // 宝箱にたどり着いた処理
+        if (playerPos === 5 && !hasTreasure) {
+            hasTreasure = true;
+            score += 1; // 宝を取った瞬間に1点
+            playTreasureSound();
+            updateOctopusSpeed();
+        }
+
+        // 船に安全に戻ってきた処理
+        if (playerPos === 0 && hasTreasure) {
+            hasTreasure = false;
+            score += 3; // 無事帰還でボーナス3点
+            playTreasureSound();
+            updateOctopusSpeed();
+        }
+
+        checkCollision();
+        draw();
+    }
+
+    // ゲームのリセット（リトライ）
+    function resetGame() {
+        playerPos = 0;
+        hasTreasure = false;
+        score = 0;
+        lives = 3;
+        gameState = "PLAYING";
+        armLengths = [0, 0, 0, 0];
+        armDirections = [1, 1, 1, 1];
+        octopusInterval = 400;
+        retryBtn.style.display = "none";
+
+        clearInterval(octopusTimer);
+        octopusTimer = setInterval(updateOctopus, octopusInterval);
+        draw();
+    }
+
+    // ==========================================================
+    // 描画システム（ベクター描画 + LCDゴースト残像演出）
+    // ==========================================================
+
+    function drawBoat(x, y, alpha) {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#6b3f1d"; // 木製の船体
+        // 船体
+        ctx.beginPath();
+        ctx.moveTo(x - 24, y);
+        ctx.lineTo(x + 24, y);
+        ctx.lineTo(x + 16, y + 12);
+        ctx.lineTo(x - 16, y + 12);
+        ctx.closePath();
+        ctx.fill();
+        // マスト
+        ctx.fillStyle = "#4a2c14";
+        ctx.fillRect(x - 2, y - 22, 4, 22);
+        // 旗
+        ctx.fillStyle = "#d94040";
+        ctx.beginPath();
+        ctx.moveTo(x + 2, y - 22);
+        ctx.lineTo(x + 16, y - 17);
+        ctx.lineTo(x + 2, y - 12);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawTreasureChest(x, y, alpha) {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#6b3f1d"; // 木箱本体
+        ctx.fillRect(x - 18, y - 10, 36, 18);
+        ctx.fillStyle = "#d4af37"; // 金色のふた
+        ctx.beginPath();
+        ctx.arc(x, y - 10, 18, Math.PI, 0);
+        ctx.fill();
+        ctx.fillStyle = "#3b2513"; // 鍵穴
+        ctx.fillRect(x - 3, y - 16, 6, 8);
+    }
+
+    // 潜水夫（丸い頭 + 体 + 足ひれ）
+    function drawDiver(x, y, alpha, carrying) {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = carrying ? "#e0a72c" : "#1b2a4a"; // 宝を持つと金色に
+        // 体
+        ctx.beginPath();
+        ctx.moveTo(x - 6, y + 4);
+        ctx.lineTo(x + 6, y + 4);
+        ctx.lineTo(x + 9, y + 16);
+        ctx.lineTo(x - 9, y + 16);
+        ctx.closePath();
+        ctx.fill();
+        // 頭（ヘルメット）
+        ctx.beginPath();
+        ctx.arc(x, y - 4, 8, 0, Math.PI * 2);
+        ctx.fill();
+        // 足ひれ
+        ctx.fillStyle = "#ff8c42";
+        ctx.beginPath();
+        ctx.moveTo(x - 9, y + 16);
+        ctx.lineTo(x - 15, y + 20);
+        ctx.lineTo(x - 6, y + 18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + 9, y + 16);
+        ctx.lineTo(x + 15, y + 20);
+        ctx.lineTo(x + 6, y + 18);
+        ctx.closePath();
+        ctx.fill();
+        // 宝物を持っている場合は光る宝を頭上に描く
+        if (carrying) {
+            ctx.fillStyle = "#ffd700";
+            ctx.beginPath();
+            ctx.arc(x, y - 16, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // タコの足を「本体側（上）」から各レーン（潜水夫の通り道）へ向けて
+    // 伸ばして描く。len(0〜ARM_MAX)に応じて到達距離が変わり、
+    // ARM_MAXでレーン上の潜水夫の位置にちょうど到達する＝危険な状態。
+    // 参考画像のように、根元は太く先端に向かって渦を巻くように
+    // 曲がりながら細くなる、本物のタコの足に近い輪郭で描く。
+    function drawTentacleArm(armIndex, len, alpha) {
+        if (len <= 0) return;
+        ctx.globalAlpha = alpha;
+
+        const origin = armOrigins[armIndex];
+        const target = lanes[armIndex + 1]; // このレーンの潜水夫の位置
+        const frac = Math.min(len, ARM_MAX) / ARM_MAX;
+
+        const dx = target.x - origin.x;
+        const dy = target.y - origin.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const ux = dx / dist, uy = dy / dist;   // 進行方向の単位ベクトル
+        const px = -uy, py = ux;                // 垂直方向の単位ベクトル
+
+        const curlDir = (armIndex % 2 === 0) ? 1 : -1; // 足ごとに巻く向きを変える
+        const phase = frame / 18 + armIndex * 1.7;
+        const waveAmp = 9;
+
+        // --- 中心線をサンプリング（根元→到達点までを緩くうねらせる） ---
+        const MAIN_SAMPLES = 10;
+        const centerline = [];
+        for (let i = 0; i <= MAIN_SAMPLES; i++) {
+            const t = i / MAIN_SAMPLES;
+            const along = t * frac;
+            const wave = Math.sin(t * Math.PI * 2.0 + phase) * waveAmp * t;
+            centerline.push({
+                x: origin.x + dx * along + px * wave,
+                y: origin.y + dy * along + py * wave
+            });
+        }
+
+        // --- 先端に渦巻き（カール）を追加してタコの足らしい丸まりを表現 ---
+        if (frac > 0.2) {
+            const tip = centerline[centerline.length - 1];
+            const prev = centerline[centerline.length - 2];
+            let tx = tip.x - prev.x, ty = tip.y - prev.y;
+            const tlen = Math.hypot(tx, ty) || 1;
+            tx /= tlen; ty /= tlen;
+            const nx = -ty * curlDir, ny = tx * curlDir;
+
+            const hookR = 8 + 6 * frac;
+            const hookCenter = { x: tip.x + nx * hookR, y: tip.y + ny * hookR };
+            const startAngle = Math.atan2(tip.y - hookCenter.y, tip.x - hookCenter.x);
+            const sweep = curlDir > 0 ? -4.4 : 4.4; // ラジアン（約250度巻く）
+            const HOOK_SAMPLES = 8;
+            for (let a = 1; a <= HOOK_SAMPLES; a++) {
+                const ang = startAngle + sweep * (a / HOOK_SAMPLES);
+                centerline.push({
+                    x: hookCenter.x + Math.cos(ang) * hookR,
+                    y: hookCenter.y + Math.sin(ang) * hookR
+                });
+            }
+        }
+
+        // --- 太さ（根元は太く、先端・渦の先はさらに細く尖る） ---
+        const n = centerline.length;
+        const baseHalfW = 10;
+        const tipHalfW = 3;
+        const widths = centerline.map((_, i) => {
+            if (i <= MAIN_SAMPLES) {
+                return baseHalfW + (tipHalfW - baseHalfW) * (i / MAIN_SAMPLES);
+            }
+            const hookT = (i - MAIN_SAMPLES) / (n - 1 - MAIN_SAMPLES || 1);
+            return tipHalfW * (1 - hookT * 0.85);
+        });
+
+        // --- 中心線から左右にオフセットした輪郭を作り、塗りつぶす ---
+        const left = [], right = [];
+        for (let i = 0; i < n; i++) {
+            let ddx, ddy;
+            if (i === 0) { ddx = centerline[1].x - centerline[0].x; ddy = centerline[1].y - centerline[0].y; }
+            else if (i === n - 1) { ddx = centerline[i].x - centerline[i - 1].x; ddy = centerline[i].y - centerline[i - 1].y; }
+            else { ddx = centerline[i + 1].x - centerline[i - 1].x; ddy = centerline[i + 1].y - centerline[i - 1].y; }
+            const dl = Math.hypot(ddx, ddy) || 1;
+            const nx2 = -ddy / dl, ny2 = ddx / dl;
+            const w = widths[i];
+            left.push({ x: centerline[i].x + nx2 * w, y: centerline[i].y + ny2 * w });
+            right.push({ x: centerline[i].x - nx2 * w, y: centerline[i].y - ny2 * w });
+        }
+
+        ctx.fillStyle = "#6b2fa0";
+        ctx.beginPath();
+        ctx.moveTo(left[0].x, left[0].y);
+        for (let i = 1; i < n; i++) ctx.lineTo(left[i].x, left[i].y);
+        for (let i = n - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- 吸盤（根元寄りの数か所に穴を開ける） ---
+        ctx.fillStyle = "#e9d9f6";
+        const suckerFracs = [0.35, 0.5, 0.65, 0.8];
+        suckerFracs.forEach((f) => {
+            const idx = Math.min(Math.round(f * MAIN_SAMPLES), MAIN_SAMPLES);
+            if (idx < 2) return;
+            const p = centerline[idx];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    // タコの頭（右下、宝箱の近くに常駐）。スプライト画像を使用し、
+    // 読み込み前は簡易な代替図形を描く。
+    function drawOctopusHead(alpha) {
+        ctx.globalAlpha = alpha;
+        const w = 78, h = 74;
+        const x = 366, y = 52; // 中心座標
+        if (octopusSpriteLoaded) {
+            // わずかに揺らして不気味さを演出（実機のふらつき感）
+            const sway = Math.sin(frame / 25) * 2;
+            ctx.drawImage(octopusSprite, x - w / 2 + sway, y - h / 2, w, h);
+        } else {
+            ctx.fillStyle = "#6b2fa0";
+            ctx.beginPath();
+            ctx.ellipse(x, y - 10, 20, 16, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function drawBubbles(alpha) {
+        ctx.globalAlpha = alpha * 0.6;
+        ctx.fillStyle = "#ffffff";
+        for (let i = 0; i < 6; i++) {
+            const bx = 30 + i * 60 + Math.sin(frame / 20 + i) * 6;
+            const by = 195 - ((frame + i * 30) % 170);
+            ctx.beginPath();
+            ctx.arc(bx, by, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function draw() {
+        frame++;
+
+        // 画面全体を海のグラデーションでクリア
+        const seaGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        seaGrad.addColorStop(0, "#bdeff5");
+        seaGrad.addColorStop(1, "#2f8fb5");
+        ctx.fillStyle = seaGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 気泡（雰囲気演出）
+        drawBubbles(0.5);
+
+        // ==========================================
+        // 第1層：全セグメントを薄く常時描画（LCDの残像ゴースト）
+        // ==========================================
+        const GHOST = 0.10;
+        drawBoat(lanes[0].x, lanes[0].y, GHOST);
+        drawTreasureChest(lanes[5].x, lanes[5].y, GHOST);
+        drawOctopusHead(GHOST);
+
+        lanes.forEach(lane => drawDiver(lane.x, lane.y, GHOST, false));
+
+        for (let i = 0; i < 4; i++) {
+            drawTentacleArm(i, ARM_MAX, GHOST);
+        }
+
+        // ==========================================
+        // 第2層：現在アクティブな部分を濃く描画
+        // ==========================================
+        const LIT = 0.9;
+        drawBoat(lanes[0].x, lanes[0].y, LIT);
+        drawTreasureChest(lanes[5].x, lanes[5].y, LIT);
+        drawOctopusHead(LIT);
+
+        for (let i = 0; i < 4; i++) {
+            drawTentacleArm(i, armLengths[i], LIT);
+        }
+
+        const curLane = lanes[playerPos];
+        drawDiver(curLane.x, curLane.y, LIT, hasTreasure);
+
+        // ==========================================
+        // UI・テキスト情報描画
+        // ==========================================
+        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = "#123049";
+        ctx.font = "bold 14px monospace";
+        ctx.textAlign = "left";
+
+        ctx.fillText(`SCORE:${String(score).padStart(4, "0")}`, 250, 18);
+        ctx.fillText(`${"\u2605".repeat(lives)}${"\u2606".repeat(3 - lives)}`, 10, 18);
+
+        const lvl = score >= 30 ? 3 : score >= 20 ? 2 : score >= 10 ? 1 : 0;
+        ctx.fillText(`LV${lvl}`, 165, 18);
+
+        // ゲームオーバー画面
+        if (gameState === "GAMEOVER") {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#e04040";
+            ctx.font = "bold 26px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 + 5);
+            ctx.font = "12px monospace";
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText("PRESS RETRY BUTTON", canvas.width / 2, canvas.height / 2 + 30);
+            ctx.textAlign = "left";
+        }
+    }
+
+    // ==========================================================
+    // コントローラー（イベントリスナー）
+    // ==========================================================
+
+    // キーボード操作
+    window.addEventListener("keydown", (e) => {
+        if (gameState === "PLAYING") {
+            if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                movePlayer("LEFT");
+            }
+            if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") {
+                e.preventDefault();
+                movePlayer("RIGHT");
+            }
+        } else if (gameState === "GAMEOVER") {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                resetGame();
+            }
+        }
+    });
+
+    // 画面の赤いプラスチックボタン操作
+    document.getElementById("btnLeft").addEventListener("click", () => {
+        ensureAudio();
+        movePlayer("LEFT");
+    });
+    document.getElementById("btnRight").addEventListener("click", () => {
+        ensureAudio();
+        movePlayer("RIGHT");
+    });
+    retryBtn.addEventListener("click", () => {
+        ensureAudio();
+        resetGame();
+    });
+
+    // --- 初回起動 ---
+    octopusTimer = setInterval(updateOctopus, octopusInterval);
+    draw();
+})();
+</script>
+</body>
+</html>
